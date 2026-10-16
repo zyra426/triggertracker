@@ -5,28 +5,32 @@
     </header>
 
     <main>
+      <div v-if="loadError" class="banner error">
+        {{ loadError }}
+        <button class="post-combat-btn" @click="load">Retry</button>
+      </div>
+
       <SpellInput
         v-model:instantSorceryCount="instantSorceryCount"
         v-model:otherNonCreatureCount="otherNonCreatureCount"
       />
 
-      <button class="combat-btn" @click="enterCombat" :class="{ active: inCombat }">
-        {{ inCombat ? 'In Combat' : 'Move to Combat' }}
-      </button>
+      <div class="turn-actions">
+        <button class="combat-btn" @click="enterCombat" :class="{ active: inCombat }">
+          {{ inCombat ? 'In Combat' : 'Move to Combat' }}
+        </button>
+        <button class="new-turn-btn" @click="newTurn">New Turn</button>
+      </div>
 
       <Battlefield />
 
-      <div v-if="inCombat" class="combat-section">
+      <div v-if="calcError" class="banner error">{{ calcError }}</div>
+      <div v-for="warning in result?.warnings ?? []" :key="warning" class="banner warning">{{ warning }}</div>
+
+      <div v-if="inCombat && result" class="combat-section">
         <Results
-          v-if="!showPostCombat"
-          :totalSpells="totalSpells"
-          :tokenResults="tokenResults"
-          :prowessResults="prowessResults"
-          :tokenMultiplier="tokenMultiplier"
-          :tokenDoublerCount="tokenDoublerCount"
-          :hasTriggerDoubler="hasTriggerDoubler"
-          :anthemBonus="anthemBonus"
-          :allyTokenFinalStats="allyTokenFinalStats"
+          :phase="result.preCombat"
+          :modifiers="result.modifiers"
         />
 
         <div class="combat-spells">
@@ -51,25 +55,20 @@
         </div>
 
         <Results
-          v-if="combatSpellCount > 0"
-          :totalSpells="totalSpells + combatSpellCount"
-          :tokenResults="tokenResults"
-          :prowessResults="combatProwessResults"
-          :tokenMultiplier="tokenMultiplier"
-          :tokenDoublerCount="tokenDoublerCount"
-          :hasTriggerDoubler="hasTriggerDoubler"
-          :anthemBonus="anthemBonus"
-          :allyTokenFinalStats="allyTokenFinalStats"
+          v-if="result.combat"
+          :phase="result.combat"
+          :modifiers="result.modifiers"
           :isCombatUpdate="true"
         />
       </div>
 
-      <div v-if="showPostCombat" class="post-combat-summary">
+      <div v-if="showPostCombat && result" class="post-combat-summary">
         <h3>Post-Combat Cleanup</h3>
-        <p>Create the following tokens:</p>
-        <div v-for="(token, i) in tokenResults" :key="i" class="token-item">
-          <span class="token-count">{{ token.finalCount }}x</span>
-          <span class="token-type">{{ token.tokenType }}</span>
+        <p v-if="finalPhase!.tokens.length > 0">Create the following tokens:</p>
+        <p v-else>No tokens to create.</p>
+        <div v-for="token in finalPhase!.tokens" :key="token.sourceId + token.token.name" class="token-item">
+          <span class="token-count">{{ token.count }}x</span>
+          <span class="token-type">{{ tokenLabel(token) }}</span>
         </div>
       </div>
 
@@ -82,51 +81,68 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted } from 'vue'
-import { useCardDatabase } from './composables/useCardDatabase.js'
-import { useBattlefield } from './composables/useBattlefield.js'
-import { useCalculator } from './composables/useCalculator.js'
-import Battlefield from './components/Battlefield.vue'
-import SpellInput from './components/SpellInput.vue'
-import Results from './components/Results.vue'
-import CardEditor from './components/CardEditor.vue'
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue"
+import { errorMessage } from "./api/client.ts"
+import { tokenLabel } from "./format.ts"
+import Battlefield from "./components/Battlefield.vue"
+import CardEditor from "./components/CardEditor.vue"
+import Results from "./components/Results.vue"
+import SpellInput from "./components/SpellInput.vue"
+import { useBattlefield } from "./composables/useBattlefield.ts"
+import { useCalculation } from "./composables/useCalculation.ts"
+import { useCards } from "./composables/useCards.ts"
 
-const { cards, loadCards } = useCardDatabase()
-const { inPlay, choiceSelections } = useBattlefield()
+const { loadCards } = useCards()
+const { loadBattlefield } = useBattlefield()
 
 const instantSorceryCount = ref(0)
 const otherNonCreatureCount = ref(0)
 const combatSpellCount = ref(0)
 const inCombat = ref(false)
 const showPostCombat = ref(false)
+const loadError = ref<string | null>(null)
 
-const {
-  totalSpells,
-  tokenResults,
-  prowessResults,
-  combatProwessResults,
-  tokenMultiplier,
-  tokenDoublerCount,
-  hasTriggerDoubler,
-  anthemBonus,
-  allyTokenFinalStats
-} = useCalculator(cards, inPlay, choiceSelections, instantSorceryCount, otherNonCreatureCount, combatSpellCount)
+const spells = computed(() => ({
+  instantSorcery: instantSorceryCount.value,
+  otherNonCreature: otherNonCreatureCount.value,
+  combatInstantSorcery: combatSpellCount.value
+}))
+
+const { result, error: calcError } = useCalculation(spells)
+
+/** The turn's totals, including spells cast in combat. */
+const finalPhase = computed(() => result.value && (result.value.combat ?? result.value.preCombat))
 
 function enterCombat() {
   inCombat.value = true
   showPostCombat.value = false
+  combatSpellCount.value = 0
 }
 
 function exitCombat() {
   inCombat.value = false
   showPostCombat.value = true
-  combatSpellCount.value = 0
 }
 
-onMounted(() => {
-  loadCards()
-})
+function newTurn() {
+  instantSorceryCount.value = 0
+  otherNonCreatureCount.value = 0
+  combatSpellCount.value = 0
+  inCombat.value = false
+  showPostCombat.value = false
+}
+
+async function load() {
+  try {
+    await Promise.all([loadCards(), loadBattlefield()])
+    loadError.value = null
+  } catch (e) {
+    loadError.value = errorMessage(e)
+  }
+}
+
+onMounted(load)
 </script>
 
 <style>
@@ -334,5 +350,57 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: #3b82f6;
+}
+
+.turn-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.turn-actions .combat-btn {
+  flex: 1;
+}
+
+.new-turn-btn {
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  border: 2px solid #444;
+  border-radius: 12px;
+  background: #1a1a2e;
+  color: #aaa;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.new-turn-btn:active {
+  transform: scale(0.98);
+}
+
+.banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.banner.error {
+  border: 1px solid #7f1d1d;
+  background: #2a1215;
+  color: #fca5a5;
+}
+
+.banner.warning {
+  border: 1px solid #78350f;
+  background: #2a1f0e;
+  color: #fbbf24;
+}
+
+.post-combat-summary {
+  margin-top: 1rem;
 }
 </style>

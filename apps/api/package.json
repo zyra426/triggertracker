@@ -1,0 +1,21 @@
+{
+  "name": "@triggertracker/api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --disable-warning=ExperimentalWarning src/main.ts",
+    "start": "tsx --disable-warning=ExperimentalWarning src/main.ts",
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "@effect/platform-node": "^4.0.5",
+    "@effect/sql-sqlite-node": "^4.0.5",
+    "@triggertracker/domain": "*",
+    "effect": "^4.0.5"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^4.0.5",
+    "tsx": "^4.23.15"
+  }
+}

@@ -8,21 +8,22 @@
       </svg>
     </div>
 
+    <div v-if="isOpen && error" class="error">{{ error }}</div>
+
     <div v-if="isOpen" class="card-grid">
       <div
         v-for="card in cards"
-        :key="card.name"
+        :key="card.id"
         class="card-toggle"
-        :class="{ active: inPlay[card.name] }"
-        @click="toggleCard(card.name)"
+        :class="{ active: isCardInPlay(card.id) }"
+        @click="run(() => toggleCard(card.id))"
       >
         <div class="card-main">
           <span class="card-name">{{ card.name }}</span>
-          <span class="card-check" v-if="inPlay[card.name]">&#10003;</span>
+          <span class="card-check" v-if="isCardInPlay(card.id)">&#10003;</span>
         </div>
-
         <div
-          v-if="card.choices && inPlay[card.name]"
+          v-if="card.choices && card.choices.length > 0 && isCardInPlay(card.id)"
           class="choice-select"
           @click.stop
         >
@@ -30,8 +31,8 @@
             v-for="choice in card.choices"
             :key="choice.name"
             class="choice-btn"
-            :class="{ selected: choiceSelections[card.name] === choice.name }"
-            @click="setChoice(card.name, choice.name)"
+            :class="{ selected: getChoice(card.id) === choice.name }"
+            @click="run(() => setChoice(card.id, choice.name))"
           >
             {{ choice.name }}
           </button>
@@ -41,19 +42,28 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed } from 'vue'
-import { useCardDatabase } from '../composables/useCardDatabase.js'
-import { useBattlefield } from '../composables/useBattlefield.js'
+<script setup lang="ts">
+import { computed, ref } from "vue"
+import { errorMessage } from "../api/client.ts"
+import { useBattlefield } from "../composables/useBattlefield.ts"
+import { useCards } from "../composables/useCards.ts"
 
-const { cards } = useCardDatabase()
-const { inPlay, choiceSelections, toggleCard, setChoice } = useBattlefield()
+const { cards } = useCards()
+const { isCardInPlay, getChoice, toggleCard, setChoice } = useBattlefield()
 
 const isOpen = ref(false)
+const error = ref<string | null>(null)
 
-const activeCount = computed(() => {
-  return cards.value.filter(c => inPlay[c.name]).length
-})
+const activeCount = computed(() => cards.value.filter((c) => isCardInPlay(c.id)).length)
+
+async function run(action: () => Promise<void>) {
+  try {
+    await action()
+    error.value = null
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
 </script>
 
 <style scoped>
@@ -168,5 +178,15 @@ const activeCount = computed(() => {
   background: #3b82f6;
   border-color: #3b82f6;
   color: white;
+}
+
+.error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+  background: #2a1215;
+  color: #fca5a5;
+  font-size: 0.8rem;
 }
 </style>

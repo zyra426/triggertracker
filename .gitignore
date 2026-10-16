@@ -22,3 +22,9 @@ test/e2e/reports
 selenium-debug.log
 .env.local
 .env.*.local
+
+### App ###
+apps/api/data/
+*.db
+*.db-wal
+*.db-shm
