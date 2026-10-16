@@ -34,22 +34,22 @@
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
+<script setup lang="ts">
+import { computed } from "vue"
 
-const instantSorceryCount = defineModel('instantSorceryCount', { type: Number, default: 0 })
-const otherNonCreatureCount = defineModel('otherNonCreatureCount', { type: Number, default: 0 })
+const instantSorceryCount = defineModel<number>("instantSorceryCount", { default: 0 })
+const otherNonCreatureCount = defineModel<number>("otherNonCreatureCount", { default: 0 })
 
 const totalSpells = computed(() => instantSorceryCount.value + otherNonCreatureCount.value)
 
-function increment(type) {
-  if (type === 'instant') instantSorceryCount.value++
+function increment(type: "instant" | "other") {
+  if (type === "instant") instantSorceryCount.value++
   else otherNonCreatureCount.value++
 }
 
-function decrement(type) {
-  if (type === 'instant' && instantSorceryCount.value > 0) instantSorceryCount.value--
-  else if (type === 'other' && otherNonCreatureCount.value > 0) otherNonCreatureCount.value--
+function decrement(type: "instant" | "other") {
+  if (type === "instant" && instantSorceryCount.value > 0) instantSorceryCount.value--
+  else if (type === "other" && otherNonCreatureCount.value > 0) otherNonCreatureCount.value--
 }
 </script>
 
